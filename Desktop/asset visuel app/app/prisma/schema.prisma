@@ -1,0 +1,123 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User model
+model User {
+  id        String     @id @default(cuid())
+  email     String     @unique
+  password  String
+  name      String?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  // Relations
+  workflows Workflow[]
+  logs      WorkflowLog[]
+  subscription Subscription?
+
+  @@map("users")
+}
+
+// Subscription model
+model Subscription {
+  id        String     @id @default(cuid())
+  userId    String     @unique
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan      String     @default("free") // "free" or "premium"
+  stripeCustomerId String?
+  stripeSubscriptionId String?
+  workflowLimit Int    @default(3) // 3 for free, unlimited for premium
+  createdAt DateTime   @default(now())
+  expiresAt DateTime?
+
+  @@map("subscriptions")
+}
+
+// Workflow model
+model Workflow {
+  id        String     @id @default(cuid())
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  description String?
+  enabled   Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  // Trigger & Action
+  trigger   WorkflowTrigger?
+  triggerId String?          @unique
+  
+  actions   WorkflowAction[]
+
+  // Logs
+  logs      WorkflowLog[]
+
+  @@unique([userId, name])
+  @@map("workflows")
+}
+
+// Trigger Configuration
+model WorkflowTrigger {
+  id        String     @id @default(cuid())
+  workflowId String    @unique
+  workflow  Workflow   @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  type      String     // "tiktok_post", "email_received", "scheduled"
+  config    String     // JSON string with trigger-specific config
+  createdAt DateTime   @default(now())
+
+  @@map("workflow_triggers")
+}
+
+// Action Configuration
+model WorkflowAction {
+  id        String     @id @default(cuid())
+  workflowId String
+  workflow  Workflow   @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  type      String     // "discord_message", "google_drive_save", "email_send"
+  config    String     // JSON string with action-specific config
+  order     Int        // Order of execution
+  createdAt DateTime   @default(now())
+
+  @@map("workflow_actions")
+}
+
+// Workflow Logs
+model WorkflowLog {
+  id        String     @id @default(cuid())
+  workflowId String
+  workflow  Workflow   @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status    String     // "success" or "error"
+  message   String?
+  errorDetails String?
+  executedAt DateTime   @default(now())
+
+  @@index([workflowId])
+  @@index([userId])
+  @@map("workflow_logs")
+}
+
+// Integration Credentials (for future use)
+model IntegrationCredential {
+  id        String     @id @default(cuid())
+  userId    String
+  platform  String     // "discord", "tiktok", "google_drive"
+  tokenType String     // "bearer", "oauth", "webhook"
+  encrypted Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@unique([userId, platform])
+  @@map("integration_credentials")
+}
